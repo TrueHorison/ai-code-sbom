@@ -53,14 +53,14 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
 
 | Trace | Exact form | Status |
 |---|---|---|
-| Co-author line | `Co-authored-by: Codex <noreply@openai.com>` | Confirmed in source |
+| Co-author line | `Co-authored-by: Codex <noreply@openai.com>` | Confirmed (source and real commits) |
 
 - The Codex source tells the agent to end commit messages with this exact trailer, once. The PR text is `Generated with [Codex](https://openai.com/codex/).`
 - Whether it is on by default is not settled. Third-party pages disagree on whether a feature flag (`codex_git_commit`) is needed and how `commit_attribution` interacts with it. I could not read the current config reference in full. aiprov only needs the trailer text, which is confirmed.
 - Sources (read, not run):
   - https://github.com/openai/codex/blob/main/codex-rs/ext/git-attribution/src/world_state.rs
   - https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/git_attribution.rs
-- I did not find a real public commit with this trailer in this pass (GitHub search rate limit).
+- Real commits, read through the GitHub API on 2026-11-01: openflowfm/visuals `f8b135806e` (`Co-authored-by:` form) and Concord-Voice/Self-Hosted `974b87dd32` (`Co-Authored-By:` form). GitHub commit search reported about 300,000 matches; that count is loose and was not used as evidence.
 
 ## 5. Aider (open source)
 
@@ -77,12 +77,24 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
   - Source (read, not run): https://github.com/Aider-AI/aider/blob/main/aider/repo.py
 - Not confirmed in a real public commit in this pass (GitHub search rate limit).
 
-## 6. Linux kernel style `Assisted-by`
+## 6. Devin (Cognition), added 2026-11-01
+
+| Trace | Exact form | Status |
+|---|---|---|
+| Co-author line | `Co-Authored-By: Devin AI <158243242+devin-ai-integration[bot]@users.noreply.github.com>` | Confirmed in real commits |
+| Commit author | `devin-ai-integration[bot] <158243242+devin-ai-integration[bot]@users.noreply.github.com>` | Confirmed in real commits |
+
+- Real commits, read through the GitHub API: wemilabs/whatherust `b947211bb6` (Devin is the author and a co-author) and parimalgavali/crop-stress-ews `d81d9e7e9d` (a human merge with Devin co-author lines kept from the branch).
+- aiprov matches the bot account in the email (`devin-ai-integration`), never the display name. A "Devin AI" co-author with any other email is not counted.
+- The stamp does not name the model, so the model provider is not recorded.
+- Docs not read in this pass; the forms above come from real commits only.
+
+## 7. Linux kernel style `Assisted-by`
 
 - Form: `Assisted-by: AGENT:MODEL [TOOLS]`. The kernel adopted it in Apr 2026 and is retiring it (see `../rivals-ai-code-sbom.md`). aiprov reads it because it names the model.
 - Not re-checked at source in this pass.
 
-## 7. git-ai notes (`refs/notes/ai`)
+## 8. git-ai notes (`refs/notes/ai`)
 
 - Ref: `refs/notes/ai`. One note per commit at most. The default `refs/notes/commits` is not used.
 - Note layout: an **attestation section**, then a line that is only `---`, then a **JSON metadata section**.
@@ -103,7 +115,7 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
   - Spec: https://github.com/git-ai-project/git-ai/blob/main/specs/git_ai_standard_v3.0.0.md
   - Repo: https://github.com/git-ai-project/git-ai
 
-## 8. AI review bots that co-author applied suggestions (checked 2026-10-29)
+## 9. AI review bots that co-author applied suggestions (checked 2026-10-29)
 
 aiprov reports these as kind `AI review bot (applied suggestion)`, apart from coding tools.
 
@@ -133,7 +145,7 @@ What aiprov matches: the email only, never the display name. It takes the part b
 Traps found:
 - **The Copilot reviewer shows up as "Copilot".** `175728472+Copilot@users.noreply.github.com` is the code review bot. The Copilot coding agent is `198982749+Copilot@users.noreply.github.com`. aiprov used to read any `<id>+Copilot@...` as the coding agent; it now splits them by id.
 - The id in the email is not always right. One real commit has `197827+copilot-pull-request-reviewer[bot]@...` (yutto-dev/yutto, c40272a80c). So aiprov matches the account name, not the id. The one exception is `Copilot`, where the id is the only way to tell the two apart.
-- Other tools show up in the same lines but are not review bots, so they are not added here: `google-labs-jules[bot]` (Jules, a coding agent), `devin-ai-integration[bot]` (Devin, a coding agent; names `Devin` and `Devin AI`), `Codex <codex@openai.com>` (seen once; not the `noreply@openai.com` form), `Copilot Autofix powered by AI <...>` (code scanning fixes), and `kilocode-bot[bot]`. Jules and Devin would be a good next addition as coding agents. Non-AI bots (`dependabot[bot]`, `github-actions[bot]`, `renovate[bot]`, `codecov[bot]`) are ignored.
+- Other tools show up in the same lines but are not review bots, so they are not added here: `google-labs-jules[bot]` (Jules, a coding agent), `devin-ai-integration[bot]` (Devin, a coding agent; names `Devin` and `Devin AI`), `Codex <codex@openai.com>` (seen once; not the `noreply@openai.com` form), `Copilot Autofix powered by AI <...>` (code scanning fixes), and `kilocode-bot[bot]`. Devin was added as a coding agent on 2026-11-01 (section 6). Jules is not added yet: no real commit read. Non-AI bots (`dependabot[bot]`, `github-actions[bot]`, `renovate[bot]`, `codecov[bot]`) are ignored.
 - Some commit messages list many bots at once (for example Juwan-Hwang/Zephyr, 82bf4496a9). I did not use those as evidence for a bot. Only bots seen in a clear single-purpose commit are in the table.
 - Bots I looked for but did not confirm in this pass (GitHub rate limit): Amazon Q Developer, Ellipsis, Korbit, Bito, Graphite, Codeflash, Sweep.
 - Source for the mechanism: https://github.com/github/docs/blob/main/content/pull-requests/how-tos/review-pull-requests/incorporating-feedback-in-your-pull-request.md

@@ -47,7 +47,7 @@ Tools it knows today:
 
 - Claude Code, and the Claude agent on GitHub
 - GitHub Copilot coding agent, and other GitHub cloud agents (unnamed)
-- Cursor, OpenAI Codex and Aider
+- Cursor, OpenAI Codex, Aider and Devin
 - `Assisted-by` stamps, and any tool named in a git-ai note
 - AI review bots (applied suggestions): Gemini Code Assist, CodeRabbit, GitHub Copilot code review,
   Sourcery, Qodo, Greptile, cubic and OpenAI Codex code review
@@ -61,6 +61,7 @@ python aiprov.py --since v1.0 --until v1.1 --format md
 python aiprov.py --since v1.0 --format cyclonedx --out release.cdx.json
 python aiprov.py --since v1.0 --format spdx --out release.spdx.json
 python aiprov.py --since v1.0 --policy policy.json --format md
+python aiprov.py --since v1.0 --format sections --out ai-sections.md
 ```
 
 Options:
@@ -69,7 +70,7 @@ Options:
 |---|---|
 | `--since` | Tag or commit the release starts after (not included). `ROOT` means all history. Required |
 | `--until` | Tag or commit the release ends at. Default `HEAD` |
-| `--format` | `cyclonedx` (default), `spdx` or `md` |
+| `--format` | `cyclonedx` (default), `spdx`, `md` or `sections` |
 | `--policy` | Policy file (see below). Without it, no check is made |
 | `--repo` | Path to the git repo. Default: the current folder |
 | `--out` | Write to this file instead of the screen |
@@ -170,6 +171,24 @@ In CycloneDX a review bot is a service with `aiprov:kind` set the same way. Its 
 
 Both JSON outputs passed the official CycloneDX 1.6 and SPDX 3.0.1 JSON schemas in testing.
 
+## AI-influenced code sections
+
+Some client terms go further than a file list. The State of Iowa's standard IT agreement says code sections "influenced by AI" must be documented, and the documentation handed over with the deliverables.
+
+`--format sections` lists them. For each file, it gives the line ranges at the end commit that were last changed by a commit with an AI coding tool trace, found with `git blame`:
+
+```
+## `src/billing.py`
+
+| Lines | Tool | Commit |
+|---|---|---|
+| 1-40 | Claude Code | `038207e80301` |
+```
+
+On pyrail v0.4.1..v0.5.0 the AI commits added 2,028 lines. 1,936 of them are still there at v0.5.0, in 19 files.
+
+A trailer marks a whole commit, so a listed block can hold lines a person wrote in that commit. Lines an AI commit wrote and a person later changed are not listed. aiprov does not add comments to your code. It tells you where they would go.
+
 ## Where the AI tools go in CycloneDX, and why
 
 aiprov puts each AI tool in `services` inside `formulation`, not at the top level. Going by the 1.6 schema text:
@@ -241,7 +260,7 @@ It only sees stamped commits. `git push --no-verify` skips the hook. For a real 
 - The provider route isn't visible. "Claude Opus 5.5" names the model maker.
   It does not say if the model ran through Anthropic, Amazon Bedrock or Google Vertex.
   Copilot and Cursor stamps don't name the model at all.
-- Line counts are lines added across commits, not the lines left at the end of the release.
+- Line counts in the SBOM and `md` outputs are lines added across commits, not the lines left at the end of the release. `sections` gives the lines left.
 - Merge commits are skipped, so code first written in a merge conflict fix is not counted.
 - Aider can be set to put an `aider: ` subject prefix on all its commits, even ones with human edits only.
   aiprov counts those as AI, so it may over-count. A committer-only `(aider)` mark is not counted.
@@ -249,5 +268,5 @@ It only sees stamped commits. `git push --no-verify` skips the hook. For a real 
   someone applies their suggestion. aiprov lists them in their own section. It never counts their lines as AI.
   The bot wrote only the suggested lines, and the rest of the commit may be human.
   It reads a fixed list of bots by their email, so a bot not on the list is not seen.
-- Codex and Aider stamps were checked in their source but not yet seen in a real public commit.
+- Aider stamps were checked in its source but not yet seen in a real public commit.
 - Formats change. `FORMATS.md` lists each one with its source and the date it was checked.

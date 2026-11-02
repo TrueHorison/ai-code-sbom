@@ -169,6 +169,17 @@ class TestDetection(Base):
         (c,) = self.walk()
         self.assertEqual(uses_of(c)["OpenAI Codex"].vendor, "OpenAI")
 
+    def test_devin(self):
+        devin = "158243242+devin-ai-integration[bot]@users.noreply.github.com"
+        self.r.commit({"a.py": "x\n"}, f"a\n\nCo-Authored-By: Devin AI <{devin}>\n")
+        self.r.commit({"b.py": "x\n"}, "b", author=("devin-ai-integration[bot]", devin))
+        # same display name, someone else's email -> not matched
+        self.r.commit({"c.py": "x\n"}, "c\n\nCo-authored-by: Devin AI <devin@example.com>\n")
+        c1, c2, c3 = self.walk()
+        self.assertEqual(uses_of(c1)["Devin"].vendor, "Cognition")
+        self.assertIn("Devin", uses_of(c2))
+        self.assertEqual(uses_of(c3), {})
+
     def test_aider_forms(self):
         self.r.commit({"a.py": "x\n"},
                       "a\n\nCo-authored-by: aider (anthropic/claude-sonnet-4) <aider@aider.chat>\n")
@@ -258,6 +269,34 @@ class TestLines(Base):
         files, _ = aiprov.aggregate(self.walk())
         self.assertEqual(files["new name.py"]["added"], 1)
         self.assertEqual(files["new name.py"]["ai_lines"], 1)
+
+
+class TestSections(Base):
+    CLAUDE = "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n"
+
+    def test_surviving_ranges(self):
+        self.r.commit({"a.py": lines(3, "h")}, "human start")
+        ai = self.r.commit({"a.py": lines(3, "h") + lines(4, "ai")}, "ai adds 4\n\n" + self.CLAUDE)
+        # a person edits the second AI line (line 5) afterwards
+        text = lines(3, "h") + "ai0\nHUMAN\nai2\nai3\n"
+        self.r.commit({"a.py": text}, "human edit")
+        sec = aiprov.ai_sections(self.r.path, "HEAD", self.walk())
+        self.assertEqual(sec["a.py"], [(4, 4, ai, ["Claude Code"]), (6, 7, ai, ["Claude Code"])])
+
+    def test_deleted_file_and_review_bot_skipped(self):
+        self.r.commit({"gone.py": "x\n"}, "ai\n\n" + self.CLAUDE)
+        self.r.git("rm", "-q", "gone.py")
+        self.r.commit({}, "remove")
+        self.r.commit({"b.py": "y\n"}, "applied\n\nCo-authored-by: gemini-code-assist[bot] "
+                      "<176961590+gemini-code-assist[bot]@users.noreply.github.com>\n")
+        self.assertEqual(aiprov.ai_sections(self.r.path, "HEAD", self.walk()), {})
+
+    def test_cli_sections(self):
+        self.r.commit({"a.py": lines(2)}, "ai\n\n" + self.CLAUDE)
+        code, out, _ = run_cli("--repo", self.r.path, "--since", "v1", "--format", "sections")
+        self.assertEqual(code, 0)
+        self.assertIn("| 1-2 | Claude Code |", out)
+        self.assertIn("Lines: 2.", out)
 
 
 class TestPolicyAndOutput(Base):

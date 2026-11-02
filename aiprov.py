@@ -31,7 +31,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 
 # What kind of AI use a finding is. The two kinds are kept apart in every output.
 KIND_CODING = "AI coding tool"
@@ -48,6 +48,13 @@ TOOLS = {
     "cursor": ("Cursor", "Anysphere"),
     "codex": ("OpenAI Codex", "OpenAI"),
     "aider": ("Aider", None),  # open source, runs locally; provider = model's
+    "devin": ("Devin", "Cognition"),
+}
+
+# Coding agents that commit through a GitHub bot account. Same matching as
+# REVIEW_BOT_LOGINS below: bot account name -> key in TOOLS.
+CODING_BOT_LOGINS = {
+    "devin-ai-integration": "devin",
 }
 
 # AI review bots. A bot like this posts a code suggestion on a pull request. When a
@@ -130,17 +137,25 @@ AIDER_CO = re.compile(r"^aider\s*\((.*)\)$", re.I)
 KEPT_KEYS = {"co-authored-by", "claude-session", "agent-logs-url", "made-with", "assisted-by"}
 
 
-def review_bot_key(email: str | None) -> str | None:
-    """Key of the AI review bot that owns this email, or None."""
-    email = (email or "").strip()
-    local, _, domain = email.lower().partition("@")
+def bot_login(email: str | None) -> str | None:
+    """GitHub account name behind a noreply email, without "<id>+" and "[bot]"."""
+    local, _, domain = (email or "").strip().lower().partition("@")
     if domain not in REVIEW_EMAIL_DOMAINS:
         return None
-    if COPILOT_REVIEW_EMAIL.match(email):
-        return "review:copilot-review"
     local = re.sub(r"^\d+\+", "", local)
-    local = re.sub(r"\[bot\]$", "", local)
-    return REVIEW_BOT_LOGINS.get(local)
+    return re.sub(r"\[bot\]$", "", local)
+
+
+def review_bot_key(email: str | None) -> str | None:
+    """Key of the AI review bot that owns this email, or None."""
+    if COPILOT_REVIEW_EMAIL.match((email or "").strip()):
+        return "review:copilot-review"
+    return REVIEW_BOT_LOGINS.get(bot_login(email) or "")
+
+
+def coding_bot_key(email: str | None) -> str | None:
+    """Key of the coding agent whose bot account owns this email, or None."""
+    return CODING_BOT_LOGINS.get(bot_login(email) or "")
 
 
 def model_provider(model: str | None) -> str | None:
@@ -273,6 +288,9 @@ def detect_trailers(author_name, author_email, committer_name, subject, trailers
         add("copilot-agent", f"Author: {author_name} <{author_email}>")
     if is_claude_gh_author:
         add("claude-github", f"Author: {author_name} <{author_email}>")
+    bot_key = coding_bot_key(author_email)
+    if bot_key:
+        add(bot_key, f"Author: {author_name} <{author_email}>")
     if (author_name or "").endswith(" (aider)"):
         add("aider", "Author name ends with (aider)")
     # Committer-only "(aider)" means aider committed human changes: not AI.
@@ -308,6 +326,8 @@ def detect_trailers(author_name, author_email, committer_name, subject, trailers
             review_key = review_bot_key(email)
             if review_key:
                 add(review_key, line)
+            elif coding_bot_key(email):
+                add(coding_bot_key(email), line)
             elif email == "noreply@anthropic.com":
                 model = None
                 if name.lower().startswith("claude") and name.lower() not in ("claude", "claude code"):
@@ -1264,6 +1284,66 @@ def build_markdown(rel, commits, files, tools, problems, policy_used):
     return "\n".join(out) + "\n"
 
 
+BLAME_HEADER = re.compile(r"^([0-9a-f]{40}) \d+ (\d+)(?: \d+)?$")
+
+
+def ai_sections(repo, until, commits) -> dict:
+    """path -> list of (first, last, sha, tools): line ranges at `until` last changed
+    by a commit in the range that has an AI coding tool trace."""
+    ai = {c.sha: sorted({u.name for u in c.uses if not u.is_review})
+          for c in commits if c.basis != "none"}
+    paths = sorted({p for c in commits if c.sha in ai for p in c.ai_lines})
+    out = {}
+    for path in paths:
+        raw = git_text(repo, "blame", "--porcelain", until, "--", path, check=False)
+        ranges = []
+        for line in raw.splitlines():
+            m = BLAME_HEADER.match(line)
+            if not m or m.group(1) not in ai:
+                continue
+            sha, n = m.group(1), int(m.group(2))
+            if ranges and ranges[-1][2] == sha and ranges[-1][1] == n - 1:
+                ranges[-1][1] = n
+            else:
+                ranges.append([n, n, sha, ai[sha]])
+        if ranges:
+            out[path] = [tuple(r) for r in sorted(ranges)]
+    return out
+
+
+def build_sections(rel, sections):
+    out = []
+    w = out.append
+    w(f"# AI-influenced code sections in {rel['name']} {rel['version']}")
+    w("")
+    w(f"- Range: `{rel['since']}..{rel['until']}` (ends at `{rel['commit'][:12]}`)")
+    n = sum(b - a + 1 for rs in sections.values() for a, b, _, _ in rs)
+    w(f"- Files with AI-influenced lines at the end of the range: {len(sections)}. Lines: {n}.")
+    w(f"- Made by aiprov {VERSION} on {now_utc()}.")
+    w("")
+    if not sections:
+        w("No lines at the end of the range come from a commit with an AI coding tool trace.")
+    for path, rs in sorted(sections.items()):
+        w(f"## `{path}`")
+        w("")
+        w("| Lines | Tool | Commit |")
+        w("|---|---|---|")
+        for a, b, sha, tools in rs:
+            w(f"| {a if a == b else f'{a}-{b}'} | {'; '.join(tools)} | `{sha[:12]}` |")
+        w("")
+    w("## How to read this")
+    w("")
+    w("- Each range is a block of lines, as they are at the end commit, that was last changed by a "
+      "commit with an AI coding tool trace. Found with `git blame`.")
+    w("- A trailer marks a whole commit, so a listed block may hold lines a person wrote in that commit.")
+    w("- Lines an AI commit wrote and a person later changed are not listed. Nor are lines from "
+      "before the range, or from merge commits.")
+    w("- AI review bot suggestions are not listed here.")
+    w("- Some client terms ask for the AI-influenced sections of code to be documented, or marked "
+      "with comments. This list says where they are. aiprov does not change your code.")
+    return "\n".join(out) + "\n"
+
+
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
@@ -1309,7 +1389,7 @@ def main(argv=None) -> int:
                     help="tag or commit the release starts after (excluded). Use ROOT for all history.")
     ap.add_argument("--until", default="HEAD", help="tag or commit the release ends at (default HEAD)")
     ap.add_argument("--policy", help="policy.json with allowed tools and providers")
-    ap.add_argument("--format", choices=["cyclonedx", "spdx", "md"], default="cyclonedx")
+    ap.add_argument("--format", choices=["cyclonedx", "spdx", "md", "sections"], default="cyclonedx")
     ap.add_argument("--repo", default=".", help="path to the git repository (default .)")
     ap.add_argument("--out", help="write output here instead of standard output")
     args = ap.parse_args(argv)
@@ -1337,6 +1417,8 @@ def main(argv=None) -> int:
         text = json.dumps(build_cyclonedx(rel, commits, files, tools, args.repo, args.until), indent=2)
     elif args.format == "spdx":
         text = json.dumps(build_spdx(rel, commits, files, tools, args.repo, args.until), indent=2)
+    elif args.format == "sections":
+        text = build_sections(rel, ai_sections(args.repo, args.until, commits))
     else:
         text = build_markdown(rel, commits, files, tools, problems, policy is not None)
 

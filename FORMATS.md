@@ -1,4 +1,4 @@
-# Commit trace formats that aiprov reads (checked 2026-10-28)
+# Commit trace formats that ai-code-sbom reads (checked 2026-10-28)
 
 Each format below was checked against a primary source: the tool's own docs, its source code, or real public commits.
 "Real commit" means I read the commit through the GitHub API. No downloaded code was run.
@@ -29,7 +29,7 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
 | Co-author line after a squash merge | `Co-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>` | Confirmed (real commit) |
 
 - GitHub says the agent's commits are "authored by Copilot", with the human as co-author.
-- In a squash merge, the agent's per-commit `Agent-Logs-Url` lines end up in the body of the single squashed commit, not in its last trailer block. aiprov reads trailer-shaped lines anywhere in the message for this reason.
+- In a squash merge, the agent's per-commit `Agent-Logs-Url` lines end up in the body of the single squashed commit, not in its last trailer block. ai-code-sbom reads trailer-shaped lines anywhere in the message for this reason.
 - **The same `Agent-Logs-Url` trailer is used by other agents running on GitHub.** A real commit in `oxc-project/oxc-vscode` has author `Claude <242468646+Claude@users.noreply.github.com>` and an `Agent-Logs-Url` trailer. So the trailer alone says "a GitHub cloud agent", and the commit author says which one.
 - Sources:
   - GitHub changelog, 20 Mar 2026: https://github.blog/changelog/2026-03-20-trace-any-copilot-coding-agent-commit-to-its-session-logs
@@ -56,7 +56,7 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
 | Co-author line | `Co-authored-by: Codex <noreply@openai.com>` | Confirmed (source and real commits) |
 
 - The Codex source tells the agent to end commit messages with this exact trailer, once. The PR text is `Generated with [Codex](https://openai.com/codex/).`
-- Whether it is on by default is not settled. Third-party pages disagree on whether a feature flag (`codex_git_commit`) is needed and how `commit_attribution` interacts with it. I could not read the current config reference in full. aiprov only needs the trailer text, which is confirmed.
+- Whether it is on by default is not settled. Third-party pages disagree on whether a feature flag (`codex_git_commit`) is needed and how `commit_attribution` interacts with it. I could not read the current config reference in full. ai-code-sbom only needs the trailer text, which is confirmed.
 - Sources (read, not run):
   - https://github.com/openai/codex/blob/main/codex-rs/ext/git-attribution/src/world_state.rs
   - https://github.com/openai/codex/blob/main/codex-rs/app-server/tests/suite/v2/git_attribution.rs
@@ -70,8 +70,8 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
 | Co-author line | `Co-authored-by: aider (<model>) <aider@aider.chat>`; `<model>` is `unknown-model` if none is known | Off |
 | Message prefix | `aider: ` at the start of the subject line | Off |
 
-- If aider only committed changes the user had already made, it adds `(aider)` to the **committer** name only. aiprov treats a committer-only mark as **not** AI-written.
-- `--attribute-commit-message-committer` adds the `aider: ` prefix to **all** aider commits, AI-written or not. aiprov can't tell which option was used, so a prefix counts as AI use. This may over-count.
+- If aider only committed changes the user had already made, it adds `(aider)` to the **committer** name only. ai-code-sbom treats a committer-only mark as **not** AI-written.
+- `--attribute-commit-message-committer` adds the `aider: ` prefix to **all** aider commits, AI-written or not. ai-code-sbom can't tell which option was used, so a prefix counts as AI use. This may over-count.
 - Sources:
   - Docs: https://aider.chat/docs/git.html
   - Source (read, not run): https://github.com/Aider-AI/aider/blob/main/aider/repo.py
@@ -85,13 +85,13 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
 | Commit author | `devin-ai-integration[bot] <158243242+devin-ai-integration[bot]@users.noreply.github.com>` | Confirmed in real commits |
 
 - Real commits, read through the GitHub API: wemilabs/whatherust `b947211bb6` (Devin is the author and a co-author) and parimalgavali/crop-stress-ews `d81d9e7e9d` (a human merge with Devin co-author lines kept from the branch).
-- aiprov matches the bot account in the email (`devin-ai-integration`), never the display name. A "Devin AI" co-author with any other email is not counted.
+- ai-code-sbom matches the bot account in the email (`devin-ai-integration`), never the display name. A "Devin AI" co-author with any other email is not counted.
 - The stamp does not name the model, so the model provider is not recorded.
 - Docs not read in this pass; the forms above come from real commits only.
 
 ## 7. Linux kernel style `Assisted-by`
 
-- Form: `Assisted-by: AGENT:MODEL [TOOLS]`. The kernel adopted it in Apr 2026 and is retiring it (see `../rivals-ai-code-sbom.md`). aiprov reads it because it names the model.
+- Form: `Assisted-by: AGENT:MODEL [TOOLS]`. The kernel adopted it in Apr 2026 and is retiring it (see `../rivals-ai-code-sbom.md`). ai-code-sbom reads it because it names the model.
 - Not re-checked at source in this pass.
 
 ## 8. git-ai notes (`refs/notes/ai`)
@@ -110,16 +110,16 @@ Status key: **Confirmed** = exact text seen in docs or source and in real commit
   - `humans` entries: `author` as `Name <email>`.
 - Prompts are kept outside git; notes don't hold prompt text.
 - git-ai rewrites notes on rebase, squash and cherry-pick, and syncs them on push and fetch.
-- I did not confirm the exact `agent_id.tool` values (for example `claude`, `cursor`, `codex`). aiprov maps the ones it knows and passes others through as written.
+- I did not confirm the exact `agent_id.tool` values (for example `claude`, `cursor`, `codex`). ai-code-sbom maps the ones it knows and passes others through as written.
 - Sources:
   - Spec: https://github.com/git-ai-project/git-ai/blob/main/specs/git_ai_standard_v3.0.0.md
   - Repo: https://github.com/git-ai-project/git-ai
 
 ## 9. AI review bots that co-author applied suggestions (checked 2026-10-29)
 
-aiprov reports these as kind `AI review bot (applied suggestion)`, apart from coding tools.
+ai-code-sbom reports these as kind `AI review bot (applied suggestion)`, apart from coding tools.
 
-How the trailer gets there: a review bot posts a suggested change on a pull request. When a person clicks "Commit suggestion" (or "Add suggestion to batch"), GitHub adds each person or bot that suggested a change as a co-author. GitHub's docs say: "Each person who suggested a change included in the commit will be a co-author of the commit." The human who applies it stays the author. After a squash merge, the trailer lines of all squashed commits end up in the message body, often repeated many times. aiprov reads them anywhere in the message and keeps each once.
+How the trailer gets there: a review bot posts a suggested change on a pull request. When a person clicks "Commit suggestion" (or "Add suggestion to batch"), GitHub adds each person or bot that suggested a change as a co-author. GitHub's docs say: "Each person who suggested a change included in the commit will be a co-author of the commit." The human who applies it stays the author. After a squash merge, the trailer lines of all squashed commits end up in the message body, often repeated many times. ai-code-sbom reads them anywhere in the message and keeps each once.
 
 | Bot (account) | Exact co-author line seen in real commits | Real commit | Status |
 |---|---|---|---|
@@ -140,11 +140,11 @@ How the trailer gets there: a review bot posts a suggested change on a pull requ
 
 How I checked: GitHub commit search (read-only) for each bot name, then read the commit message through the GitHub API. For every row above I read the commit and saw the exact line. Account ids come from `GET /users/<login>` (gemini 176961590, coderabbitai 136622811, sourcery-ai 58596630, copilot-pull-request-reviewer[bot] 175728472, copilot-swe-agent[bot] 198982749). Search turned up many thousands of commits for the first four bots.
 
-What aiprov matches: the email only, never the display name. It takes the part before the `@`, drops a leading `<id>+` and a trailing `[bot]`, and looks that up. The domain must be `users.noreply.github.com` or `github.com`. A human who types a bot's name with some other email is not matched.
+What ai-code-sbom matches: the email only, never the display name. It takes the part before the `@`, drops a leading `<id>+` and a trailing `[bot]`, and looks that up. The domain must be `users.noreply.github.com` or `github.com`. A human who types a bot's name with some other email is not matched.
 
 Traps found:
-- **The Copilot reviewer shows up as "Copilot".** `175728472+Copilot@users.noreply.github.com` is the code review bot. The Copilot coding agent is `198982749+Copilot@users.noreply.github.com`. aiprov used to read any `<id>+Copilot@...` as the coding agent; it now splits them by id.
-- The id in the email is not always right. One real commit has `197827+copilot-pull-request-reviewer[bot]@...` (yutto-dev/yutto, c40272a80c). So aiprov matches the account name, not the id. The one exception is `Copilot`, where the id is the only way to tell the two apart.
+- **The Copilot reviewer shows up as "Copilot".** `175728472+Copilot@users.noreply.github.com` is the code review bot. The Copilot coding agent is `198982749+Copilot@users.noreply.github.com`. ai-code-sbom used to read any `<id>+Copilot@...` as the coding agent; it now splits them by id.
+- The id in the email is not always right. One real commit has `197827+copilot-pull-request-reviewer[bot]@...` (yutto-dev/yutto, c40272a80c). So ai-code-sbom matches the account name, not the id. The one exception is `Copilot`, where the id is the only way to tell the two apart.
 - Other tools show up in the same lines but are not review bots, so they are not added here: `google-labs-jules[bot]` (Jules, a coding agent), `devin-ai-integration[bot]` (Devin, a coding agent; names `Devin` and `Devin AI`), `Codex <codex@openai.com>` (seen once; not the `noreply@openai.com` form), `Copilot Autofix powered by AI <...>` (code scanning fixes), and `kilocode-bot[bot]`. Devin was added as a coding agent on 2026-11-01 (section 6). Jules is not added yet: no real commit read. Non-AI bots (`dependabot[bot]`, `github-actions[bot]`, `renovate[bot]`, `codecov[bot]`) are ignored.
 - Some commit messages list many bots at once (for example Juwan-Hwang/Zephyr, 82bf4496a9). I did not use those as evidence for a bot. Only bots seen in a clear single-purpose commit are in the table.
 - Bots I looked for but did not confirm in this pass (GitHub rate limit): Amazon Q Developer, Ellipsis, Korbit, Bito, Graphite, Codeflash, Sweep.
